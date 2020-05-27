@@ -1,0 +1,156 @@
+---
+title: "STAT 654 Final"
+author: "Min Tamang,ug5773"
+date: ' 05/07/2020'
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+## Part 1
+
+Read the excellent blog post from the Data Science Heroes website, How to create a sequential model in Keras for R.
+
+Run all of the code in this blog post in your R Notebook and explain each step presented. Clearly describe what kind of neural network is being fitted.
+
+Change the neural network to use units = 4 for the first hidden layer and units = 2 for the second layer. Change the number of epochs = 40 in the fit(). How well does this neural network perform compared to the original neural network run
+
+**Answer**
+
+# The code from the blog post
+
+**Creating the data**
+```{r}
+# input: 10000 rows and 3 columns of unif distribution
+x_data <- matrix(data=runif(30000), nrow = 10000, ncol = 3)
+head(x_data)
+# output: 1 for sum of 3 row numbers is greater than 3, 0 otherwise
+y_data <- ifelse(rowSums(x_data)>1.5,1,0)
+head(y_data)
+```
+
+
+**One-hot encoding in Keras**
+```{r}
+library(keras)
+library(tidyverse)
+# create one-hot vector, 1 = vector[0,1] and 0 = [1,0]
+y_data_oneh <- to_categorical(y_data, num_classes = 2)
+head(y_data_oneh)
+```
+
+
+
+**Creating a sequential model in Keras**
+```{r}
+# build a model with 3 dense layers: with 3 input variables and output with 2 
+# possible outcomes
+model <- keras_model_sequential() %>%
+  layer_dense(units = 64, activation = "relu", input_shape = ncol(x_data)) %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = ncol(y_data_oneh), activation = "softmax")
+#check the model and shapes per layer
+model
+```
+
+```{r}
+# optimize the model with complie function: define the loss, optimizer function # and the metric
+compile(model, loss = "categorical_crossentropy", optimizer = optimizer_rmsprop(), metrics = "accuracy")
+```
+
+
+```{r}
+# train the model
+history <- fit(model, x_data, y_data_oneh, epochs = 20, batch_size = 128, validation_split = 0.2)
+```
+
+```{r}
+history
+```
+
+```{r}
+plot(history)
+```
+
+**Validating with unseen data**
+
+```{r}
+# create unseen test data with 1000 rows and 3 columns
+x_data_test <- matrix(data = runif(3000), nrow = 1000, ncol = 3)
+dim(x_data_test)
+```
+
+```{r}
+# predict new cases, predict_classes does one-hot decoding automatically
+y_data_pred <- predict_classes(model, x_data_test)
+glimpse(y_data_pred)
+```
+
+```{r}
+# n-rows, n-classes to predict
+y_data_pred_oneh <- predict(model, x_data_test)
+dim(y_data_pred_oneh)
+head(y_data_pred_oneh)
+```
+
+
+**Evaluating the model(Training vs. Test)**
+```{r}
+# create the real target value to compare with predicted
+y_data_real <- ifelse(rowSums(x_data_test)> 1.5,1,0)
+y_data_real_oneh <- to_categorical(y_data_real)
+```
+
+```{r}
+# training data
+evaluate(model, x_data, y_data_oneh, verbose = 0)
+```
+
+
+```{r}
+# test data
+evaluate(model, x_data_test, y_data_real_oneh, verbose = 0)
+```
+
+Nueral newtwork is a multi-layer neural network because it is composed of multilple layers(input, hidden and output) of neurons interconnected in a feedforward way. 
+
+
+
+# model with first hidden layer units = 4, second hidden layer=2, fit epoch = 40
+
+```{r}
+model2<- keras_model_sequential() %>%
+  layer_dense(units = 64, activation = "relu", input_shape = ncol(x_data)) %>%
+  layer_dense(units = 4, activation = "relu") %>%
+  layer_dense(units = 2, activation = "relu") %>%
+  layer_dense(units = ncol(y_data_oneh), activation = "softmax")
+#check the model and shapes per layer
+model2
+```
+
+```{r}
+compile(model2, loss = "categorical_crossentropy", optimizer = optimizer_rmsprop(), metrics = "accuracy")
+```
+
+```{r}
+history <- fit(model2, x_data, y_data_oneh, epochs = 40, batch_size = 128, validation_split = 0.2)
+```
+
+```{r}
+history
+```
+
+```{r}
+plot(history)
+```
+
+```{r}
+# see with test data
+evaluate(model2, x_data_test, y_data_real_oneh, verbose = 0)
+```
+
+Neural network with units=4 on the first hidden layer and units=2 with on the second with 40 epochs in the fit performed better compared to the original neural network.
+
+
+
+

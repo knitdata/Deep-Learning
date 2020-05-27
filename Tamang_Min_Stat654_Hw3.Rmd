@@ -1,0 +1,262 @@
+---
+title: "STAT 654, HW3"
+author: ' Min Tamang'
+date: ' 04/19/2020'
+output:
+  word_document: default
+  html_notebook: default
+---
+
+# Run the code in Chapter 4.
+***GitHub: R Markdown Notebooks for "Deep Learning with R"- Overfitting, overfitting-and-underfitting.Rmd***
+
+# Common regularization techniques to improve movie classification model
+* Getting more training data.
+* Reducing the capacity of the network.
+* Adding weight regularization.
+* Adding dropout.
+
+```{r}
+library(keras)
+
+imdb <- dataset_imdb(num_words = 10000)
+c(c(train_data, train_labels), c(test_data, test_labels)) %<-% imdb
+
+vectorize_sequences <- function(sequences, dimension = 10000) {
+  # Create an all-zero matrix of shape (len(sequences), dimension)
+  results <- matrix(0, nrow = length(sequences), ncol = dimension)
+  for (i in 1:length(sequences))
+    # Sets specific indices of results[i] to 1s
+    results[i, sequences[[i]]] <- 1
+  results
+}
+
+# Our vectorized training data
+x_train <- vectorize_sequences(train_data)
+# Our vectorized test data
+x_test <- vectorize_sequences(test_data)
+
+# Our vectorized labels
+y_train <- as.numeric(train_labels)
+y_test <- as.numeric(test_labels)
+```
+
+
+## Reducing the network's size
+
+
+```{r}
+#original network
+original_model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+original_model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+```
+
+
+
+```{r}
+#reduce the size of the network
+smaller_model <- keras_model_sequential() %>% 
+  layer_dense(units = 4, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 4, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+smaller_model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+```
+
+
+
+```{r}
+#train the original network
+original_hist <- original_model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_test, y_test)
+)
+```
+
+```{r}
+#train the reduced model network
+smaller_model_hist <- smaller_model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_test, y_test)
+)
+```
+
+
+
+```{r}
+# R function to take and plot a named list of loss series 
+library(ggplot2)
+library(tidyr)
+plot_training_losses <- function(losses) {
+  loss_names <- names(losses)
+  losses <- as.data.frame(losses)
+  losses$epoch <- seq_len(nrow(losses))
+  losses %>% 
+    gather(model, loss, loss_names[[1]], loss_names[[2]]) %>% 
+    ggplot(aes(x = epoch, y = loss, colour = model)) +
+    geom_point()
+}
+```
+
+
+```{r}
+#comparison of the losses
+plot_training_losses(losses = list(
+  original_model = original_hist$metrics$val_loss,
+  smaller_model = smaller_model_hist$metrics$val_loss
+))
+```
+
+
+```{r}
+#even bigger model
+bigger_model <- keras_model_sequential() %>% 
+  layer_dense(units = 512, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 512, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+bigger_model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c('acc')
+)
+```
+
+```{r}
+bigger_model_hist <- bigger_model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_test, y_test)
+)
+```
+
+
+```{r}
+#compare the bigger and original network
+plot_training_losses(losses = list(
+  original_model = original_hist$metrics$val_loss,
+  bigger_model = bigger_model_hist$metrics$val_loss
+))
+```
+
+
+```{r}
+#the training losses 
+plot_training_losses(losses = list(
+  original_model = original_hist$metrics$loss,
+  bigger_model = bigger_model_hist$metrics$loss
+))
+```
+
+
+
+## Adding weight regularization
+ 
+```{r}
+l2_model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, kernel_regularizer = regularizer_l2(0.001),
+              activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 16, kernel_regularizer = regularizer_l2(0.001),
+              activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+l2_model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("acc")
+)
+```
+
+
+```{r}
+#the impact of our L2 regularization penalty
+l2_model_hist <- l2_model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_test, y_test)
+)
+```
+
+```{r}
+plot_training_losses(losses = list(
+  original_model = original_hist$metrics$val_loss,
+  l2_model = l2_model_hist$metrics$val_loss
+))
+```
+
+
+```{r}
+# alternatives regularizers
+# L1 regularization
+regularizer_l1(0.001)
+
+# L1 and L2 regularization at the same time
+regularizer_l1_l2(l1 = 0.001, l2 = 0.001)
+```
+
+## Adding dropout
+
+```{r}
+#50% drop-outs
+layer_dropout(rate = 0.5)
+```
+
+
+```{r}
+dpt_model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dropout(rate = 0.5) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dropout(rate = 0.5) %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+dpt_model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("acc")
+)
+```
+
+```{r}
+dpt_model_hist <- dpt_model %>% fit(
+  x_train, y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_test, y_test)
+)
+```
+
+
+```{r}
+#compare with originial model
+plot_training_losses(losses = list(
+  original_model = original_hist$metrics$val_loss,
+  dpt_model = dpt_model_hist$metrics$val_loss
+))
+```
+
+
+To recap: here the most common ways to prevent overfitting in neural networks:
+
+* Getting more training data.
+* Reducing the capacity of the network.
+* Adding weight regularization.
+* Adding dropout.

@@ -1,0 +1,128 @@
+---
+title: "STAT 654, Final "
+author: "Min Tamang,ug5773"
+date: " 05/08/2020"
+
+output: html_notebook
+---
+
+## Part 2
+
+**Run all of the code from the RStudio Keras website Example cfar10 and explain each step presented. Clearly describe what kind of neural network is being fitted.**
+
+**cifar10_cnn**
+```{r}
+library(keras)
+# set the parametes
+batch_size <- 32
+epochs <- 3
+data_augmentation <- TRUE
+```
+
+
+```{r}
+# load the cifar10 dataset in keras
+cifar10 <- dataset_cifar10()
+```
+
+```{r}
+# training and test sets with feature scale RGB values
+x_train <- cifar10$train$x/255
+x_test <- cifar10$test$y/255
+y_train <- to_categorical(cifar10$train$y, num_classes = 10)
+y_test <- to_categorical(cifar10$test$y, num_classes = 10)
+```
+
+```{r}
+str(x_train)
+str(y_train)
+str(x_test)
+str(y_test)
+```
+
+```{r}
+# Initialize sequential model
+model <- keras_model_sequential()
+# build network architecture with hidden 2D convolutional layer being fed 32x32
+# pixel images
+model %>% 
+  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same", 
+    input_shape = c(32, 32, 3)) %>%
+  layer_activation("relu") %>%
+  # second hidden layer
+  layer_conv_2d(filter = 32, kernel_size = c(3,3)) %>%
+  layer_activation("relu") %>%
+  # use max pooling
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_dropout(0.25) %>% 
+  
+  # 2 additional hidden 2D convolutional layers
+  layer_conv_2d(filter = 32, kernel_size = c(3,3), padding = "same") %>%
+  layer_activation("relu") %>%
+  layer_conv_2d(filter = 32, kernel_size = c(3,3)) %>%
+  layer_activation("relu") %>%
+
+  # use max pooling again
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_dropout(0.25) %>%
+  
+  # flatten max filtered output into feature vector and feed into dense layer
+  layer_flatten() %>%
+  layer_dense(512) %>%
+  layer_activation("relu") %>%
+  layer_dropout(0.5) %>%
+
+  # outputs from dense layer are projected onto 10 unit
+  # output layer- 10 way classification
+  layer_dense(10) %>%
+  layer_activation("softmax")
+
+opt <- optimizer_rmsprop(lr = 0.0001, decay = 1e-6)
+ # model compilation
+model %>% compile(
+  loss = "categorical_crossentropy",
+  optimizer = opt,
+  metrics = "accuracy")
+```
+
+# train the convnet on data 
+```{r}
+if(!data_augmentation){
+  
+  model %>% fit(
+    x_train, y_train,
+    batch_size = batch_size,
+    epochs = epochs,
+    validation_data = list(x_test, y_test),
+    shuffle = TRUE
+  )
+  
+} else {
+  
+  datagen <- image_data_generator(
+    rotation_range = 20,
+    width_shift_range = 0.2,
+    height_shift_range = 0.2,
+    horizontal_flip = TRUE
+  )
+  
+  datagen %>% fit_image_data_generator(x_train)
+  
+  model %>% fit_generator(
+    flow_images_from_data(x_train, y_train, datagen, batch_size = batch_size),
+    steps_per_epoch = as.integer(50000/batch_size), 
+    epochs = epochs, 
+    validation_data = list(x_test, y_test)
+  )
+  
+}
+```
+
+```{r}
+# evaluate the model on the test data
+results <- evaluate(model, x_test, y_test)
+results
+```
+
+
+
