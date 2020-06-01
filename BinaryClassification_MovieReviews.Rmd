@@ -1,0 +1,557 @@
+---
+author: 'Min Tamang'
+date: ' 04/04/2020'
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+### Binary classification - Movie Reviews
+
+## IMDB Dataset
+```{r}
+library(keras)
+imdb <- dataset_imdb(num_words = 10000) #top 10k words in the training set
+c(c(train_data, train_labels), c(test_data, test_labels)) %<-% imdb
+```
+
+
+```{r}
+str(train_data[[1]])
+train_labels[[1]]
+max(sapply(train_data, max))
+```
+
+```{r}
+# word_index is a dictionary mapping words to an integer index
+word_index <- dataset_imdb_word_index()
+# We reverse it, mapping integer indices to words
+reverse_word_index <- names(word_index)
+names(reverse_word_index) <- word_index
+# We decode the review; note that our indices were offset by 3
+# because 0, 1 and 2 are reserved indices for "padding", "start of sequence", and "unknown".
+decoded_review <- sapply(train_data[[1]], function(index) {
+  word <- if (index >= 3) reverse_word_index[[as.character(index - 3)]]
+  if (!is.null(word)) word else "?"
+})
+```
+
+```{r}
+cat(decoded_review)
+```
+
+## Preparing Data
+```{r}
+vectorize_sequences <- function(sequences, dimension = 10000) {
+  # Create an all-zero matrix of shape (len(sequences), dimension)
+  results <- matrix(0, nrow = length(sequences), ncol = dimension)
+  for (i in 1:length(sequences))
+    # Sets specific indices of results[i] to 1s
+    results[i, sequences[[i]]] <- 1
+  results
+}
+
+# Our vectorized training data
+x_train <- vectorize_sequences(train_data)
+# Our vectorized test data
+x_test <- vectorize_sequences(test_data)
+```
+
+```{r}
+str(x_train[1,])
+```
+```{r}
+# Our vectorized labels
+y_train <- as.numeric(train_labels)
+y_test <- as.numeric(test_labels)
+```
+
+## Building the Model
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+```
+
+
+**Loss Functions**
+```{r}
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+```
+
+
+```{r}
+model %>% compile(
+  optimizer = optimizer_rmsprop(lr=0.001),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+
+
+```{r}
+model %>% compile(
+  optimizer = optimizer_rmsprop(lr = 0.001),
+  loss = loss_binary_crossentropy,
+  metrics = metric_binary_accuracy
+) 
+```
+
+## Create a "validation set" by setting apart 10,000 samples from the original training data
+```{r}
+val_indices <- 1:10000
+
+x_val <- x_train[val_indices,]
+partial_x_train <- x_train[-val_indices,]
+
+y_val <- y_train[val_indices]
+partial_y_train <- y_train[-val_indices]
+```
+
+
+
+## Train Model
+```{r}
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  partial_x_train,
+  partial_y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_val, y_val)
+)
+```
+
+
+```{r}
+str(history)
+```
+
+```{r}
+plot(history)
+```
+
+
+## Train a new network from scratch for four epochs and then evaluate it on the test data.
+
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+model %>% fit(x_train, y_train, epochs = 4, batch_size = 512)
+results <- model %>% evaluate(x_test, y_test)
+```
+
+```{r}
+results
+```
+
+```{r}
+#Using a trained network to generate predictions on new data
+model %>% predict(x_test[1:10,])
+```
+
+
+### Multi-class Classification
+
+## The Reuters dataset
+```{r}
+reuters <- dataset_reuters(num_words = 10000)
+c(c(train_data, train_labels), c(test_data, test_labels)) %<-% reuters
+```
+
+```{r}
+length(train_data)
+```
+
+```{r}
+length(test_data)
+```
+
+```{r}
+train_data[[1]]
+```
+
+```{r}
+word_index <- dataset_reuters_word_index()
+reverse_word_index <- names(word_index)
+names(reverse_word_index) <- word_index
+decoded_newswire <- sapply(train_data[[1]], function(index) {
+  # Note that our indices were offset by 3 because 0, 1, and 2
+  # are reserved indices for "padding", "start of sequence", and "unknown".
+  word <- if (index >= 3) reverse_word_index[[as.character(index - 3)]]
+  if (!is.null(word)) word else "?"
+})
+```
+
+```{r}
+cat(decoded_newswire)
+```
+
+```{r}
+train_labels[[1]]
+```
+
+## Preparing the data
+
+```{r}
+vectorize_sequences <- function(sequences, dimension = 10000) {
+  results <- matrix(0, nrow = length(sequences), ncol = dimension)
+  for (i in 1:length(sequences))
+    results[i, sequences[[i]]] <- 1
+  results
+}
+
+x_train <- vectorize_sequences(train_data)
+x_test <- vectorize_sequences(test_data)
+```
+
+
+```{r}
+to_one_hot <- function(labels, dimension = 46) {
+  results <- matrix(0, nrow = length(labels), ncol = dimension)
+  for (i in 1:length(labels))
+    results[i, labels[[i]] + 1] <- 1
+  results
+}
+
+one_hot_train_labels <- to_one_hot(train_labels)
+one_hot_test_labels <- to_one_hot(test_labels)
+```
+
+
+
+```{r}
+one_hot_train_labels <- to_categorical(train_labels)
+one_hot_test_labels <- to_categorical(test_labels)
+```
+
+## Building Model
+
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 64, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 64, activation = "relu") %>% 
+  layer_dense(units = 46, activation = "softmax")
+```
+
+
+```{r}
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+```
+
+## Validating our approach
+
+```{r}
+#1,000 samples in our training data to use as a validation set
+val_indices <- 1:1000
+
+x_val <- x_train[val_indices,]
+partial_x_train <- x_train[-val_indices,]
+
+y_val <- one_hot_train_labels[val_indices,]
+partial_y_train = one_hot_train_labels[-val_indices,]
+```
+
+
+
+```{r}
+#train our network for 20 epochs
+history <- model %>% fit(
+  partial_x_train,
+  partial_y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_val, y_val)
+)
+```
+
+
+```{r}
+#loss and accuracy curve
+plot(history)
+```
+
+
+```{r}
+#train a new network from scratch for nine epochs and then evaluate it on the test set
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 64, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 64, activation = "relu") %>% 
+  layer_dense(units = 46, activation = "softmax")
+  
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  partial_x_train,
+  partial_y_train,
+  epochs = 9,
+  batch_size = 512,
+  validation_data = list(x_val, y_val)
+)
+
+results <- model %>% evaluate(x_test, one_hot_test_labels)
+```
+
+```{r}
+results
+```
+
+
+```{r}
+test_labels_copy <- test_labels
+test_labels_copy <- sample(test_labels_copy)
+length(which(test_labels == test_labels_copy)) / length(test_labels)
+```
+
+## Generating predictions on new data
+
+```{r}
+predictions <- model %>% predict(x_test)
+```
+
+
+```{r}
+dim(predictions)
+```
+
+
+```{r}
+sum(predictions[1,])
+```
+
+
+
+```{r}
+which.max(predictions[1,])
+```
+
+## A different way to handle the labels and the loss
+
+```{r}
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "sparse_categorical_crossentropy",
+  metrics = c("accuracy")
+)
+```
+
+
+## On the importance of having sufficiently large intermediate layers
+```{r}
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 64, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 4, activation = "relu") %>% 
+  layer_dense(units = 46, activation = "softmax")
+  
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+model %>% fit(
+  partial_x_train,
+  partial_y_train,
+  epochs = 20,
+  batch_size = 128,
+  validation_data = list(x_val, y_val)
+)
+```
+
+
+### Regression
+
+## The Boston Housing Price dataset
+
+```{r}
+dataset <- dataset_boston_housing()
+c(c(train_data, train_targets), c(test_data, test_targets)) %<-% dataset
+```
+
+```{r}
+str(train_data)
+```
+
+```{r}
+str(test_data)
+```
+
+```{r}
+str(train_targets)
+```
+
+
+## Preparing the data
+
+```{r}
+mean <- apply(train_data, 2, mean)
+std <- apply(train_data, 2, sd)
+train_data <- scale(train_data, center = mean, scale = std)
+test_data <- scale(test_data, center = mean, scale = std)
+```
+
+
+
+## Building Model
+```{r}
+# Because we will need to instantiate the same model multiple times,
+# we use a function to construct it.
+build_model <- function() {
+  model <- keras_model_sequential() %>% 
+    layer_dense(units = 64, activation = "relu", 
+                input_shape = dim(train_data)[[2]]) %>% 
+    layer_dense(units = 64, activation = "relu") %>% 
+    layer_dense(units = 1) 
+    
+  model %>% compile(
+    optimizer = "rmsprop", 
+    loss = "mse", 
+    metrics = c("mae")
+  )
+}
+```
+
+
+## Validating our approach using K-fold validation
+
+```{r}
+k <- 4
+indices <- sample(1:nrow(train_data))
+folds <- cut(1:length(indices), breaks = k, labels = FALSE) 
+
+num_epochs <- 100
+all_scores <- c()
+for (i in 1:k) {
+  cat("processing fold #", i, "\n")
+  # Prepare the validation data: data from partition # k
+  val_indices <- which(folds == i, arr.ind = TRUE) 
+  val_data <- train_data[val_indices,]
+  val_targets <- train_targets[val_indices]
+  
+  # Prepare the training data: data from all other partitions
+  partial_train_data <- train_data[-val_indices,]
+  partial_train_targets <- train_targets[-val_indices]
+  
+  # Build the Keras model (already compiled)
+  model <- build_model()
+  
+  # Train the model (in silent mode, verbose=0)
+  model %>% fit(partial_train_data, partial_train_targets,
+                epochs = num_epochs, batch_size = 1, verbose = 0)
+                
+  # Evaluate the model on the validation data
+  results <- model %>% evaluate(val_data, val_targets, verbose = 0)
+  all_scores <- c(all_scores, results$mae)
+}  
+```
+
+```{r}
+all_scores
+```
+
+```{r}
+mean(all_scores)
+```
+
+
+
+Training the network for a bit longer: 500 epochs.
+```{r}
+# Some memory clean-up
+k_clear_session()
+```
+
+```{r}
+num_epochs <- 500
+all_mae_histories <- NULL
+for (i in 1:k) {
+  cat("processing fold #", i, "\n")
+  
+  # Prepare the validation data: data from partition # k
+  val_indices <- which(folds == i, arr.ind = TRUE)
+  val_data <- train_data[val_indices,]
+  val_targets <- train_targets[val_indices]
+  
+  # Prepare the training data: data from all other partitions
+  partial_train_data <- train_data[-val_indices,]
+  partial_train_targets <- train_targets[-val_indices]
+  
+  # Build the Keras model (already compiled)
+  model <- build_model()
+  
+  # Train the model (in silent mode, verbose=0)
+  history <- model %>% fit(
+    partial_train_data, partial_train_targets,
+    validation_data = list(val_data, val_targets),
+    epochs = num_epochs, batch_size = 1, verbose = 0
+  )
+  mae_history <- history$metrics$val_mae
+  all_mae_histories <- rbind(all_mae_histories, mae_history)
+}
+```
+
+We can then compute the average of the per-epoch MAE scores for all folds: 
+```{r}
+average_mae_history <- data.frame(
+  epoch = seq(1:ncol(all_mae_histories)),
+  validation_mae = apply(all_mae_histories, 2, mean)
+)
+```
+
+
+
+```{r}
+library(ggplot2)
+ggplot(average_mae_history, aes(x = epoch, y = validation_mae)) + geom_line()
+```
+
+
+```{r}
+ggplot(average_mae_history, aes(x = epoch, y = validation_mae)) + geom_smooth()
+```
+
+
+
+```{r}
+# Get a fresh, compiled model.
+model <- build_model()
+
+# Train it on the entirety of the data.
+model %>% fit(train_data, train_targets,
+          epochs = 80, batch_size = 16, verbose = 0)
+
+result <- model %>% evaluate(test_data, test_targets)
+```
+
+```{r}
+result
+```
+
+

@@ -1,0 +1,235 @@
+---
+title: "STAT 654"
+author: ' Min Tamang'
+date: "04/29/2020"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+**1. Explain what a tensor is. Give examples of 2D, 3D, 4D, and 5D tensors.**
+
+Tensor is a generalization of vectors and matrices to N-dimensional spcae or axis. In neural network data are stored in the form of tensor. It can house data in arbitrary dimensions. At its core a tensor is container for data almost always numerical data. So it's a container for numbers. 
+
+Examples of 
+2D tensors - matrices, stock price graph for every minute.
+
+3D tensors - Time series or sequence data, stock price graph of 5 days(a week), medical scans of a patient.
+
+4D tensors - Images,  graph of 10 different stocks with 5 days data(mutual fund), medical scans of multiple patients.
+
+5D tensors - Videos, collection of 20 mutual funds.
+
+
+**2. In Section 3.4 of the Deep Learning with R book, the IMDB example is presented. Explain what the data being fitted is and what the input layer does in the neural network used in that section. Run the code form that example, try adding dropout layer(s) to see if the fit can be improved.**
+
+
+The IMDB dataset presented in section 3.4 of the book comes packaged with Keras. It is a set of 50,000 highly polarized reviews from the Internet Movie Database. It has already been preprocessed:they’re split into half each containing training and testing sets with 50% positive and negative reviews.
+
+Input layer is vectorized text which sequentially feed text data into 2 hidden layers of 16 neurons/units and 1 output layer which provides results in the form of probability.
+
+```{r}
+# IMDB Dataset
+library(keras)
+imdb <- dataset_imdb(num_words = 10000) #top 10k words in the training set
+c(c(train_data, train_labels), c(test_data, test_labels)) %<-% imdb
+```
+
+
+```{r}
+str(train_data[[1]])
+train_labels[[1]]
+max(sapply(train_data, max))
+```
+
+```{r}
+# word_index is a dictionary mapping words to an integer index
+word_index <- dataset_imdb_word_index()
+# We reverse it, mapping integer indices to words
+reverse_word_index <- names(word_index)
+names(reverse_word_index) <- word_index
+# We decode the review; note that our indices were offset by 3
+# because 0, 1 and 2 are reserved indices for "padding", "start of sequence", and "unknown".
+decoded_review <- sapply(train_data[[1]], function(index) {
+  word <- if (index >= 3) reverse_word_index[[as.character(index - 3)]]
+  if (!is.null(word)) word else "?"
+})
+```
+
+
+```{r}
+# Preparing Data
+vectorize_sequences <- function(sequences, dimension = 10000) {
+  # Create an all-zero matrix of shape (len(sequences), dimension)
+  results <- matrix(0, nrow = length(sequences), ncol = dimension)
+  for (i in 1:length(sequences))
+    # Sets specific indices of results[i] to 1s
+    results[i, sequences[[i]]] <- 1
+  results
+}
+
+# Our vectorized training data
+x_train <- vectorize_sequences(train_data)
+# Our vectorized test data
+x_test <- vectorize_sequences(test_data)
+```
+
+
+```{r}
+# Our vectorized labels
+y_train <- as.numeric(train_labels)
+y_test <- as.numeric(test_labels)
+```
+
+```{r}
+ #Building the Model
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+```
+
+```{r}
+#loss function
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+```
+
+
+```{r}
+model %>% compile(
+  optimizer = optimizer_rmsprop(lr=0.001),
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+) 
+```
+
+
+```{r}
+model %>% compile(
+  optimizer = optimizer_rmsprop(lr = 0.001),
+  loss = loss_binary_crossentropy,
+  metrics = metric_binary_accuracy
+) 
+```
+
+
+```{r}
+# Create a "validation set" by setting apart 10,000 samples from the original training data
+val_indices <- 1:10000
+
+x_val <- x_train[val_indices,]
+partial_x_train <- x_train[-val_indices,]
+
+y_val <- y_train[val_indices]
+partial_y_train <- y_train[-val_indices]
+```
+
+
+
+
+```{r}
+#train model
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  partial_x_train,
+  partial_y_train,
+  epochs = 20,
+  batch_size = 512,
+  validation_data = list(x_val, y_val)
+)
+```
+
+
+```{r}
+str(history)
+```
+
+```{r}
+plot(history)
+```
+
+
+```{r}
+# Train a new network from scratch for four epochs and then evaluate it on the test data.
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+model %>% fit(x_train, y_train, epochs = 4, batch_size = 512)
+results <- model %>% evaluate(x_test, y_test)
+```
+
+```{r}
+results
+```
+
+
+
+**Add dropout layers** 
+```{r}
+#50% drop-outs
+layer_dropout(rate = 0.5)
+```
+
+```{r}
+dpt_model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu", input_shape = c(10000)) %>% 
+  layer_dropout(rate = 0.5) %>% 
+  layer_dense(units = 16, activation = "relu") %>% 
+  layer_dropout(rate = 0.5) %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+dpt_model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+dpt_model %>% fit(x_train, y_train, epochs = 4, batch_size = 512)
+results1 <- dpt_model %>% evaluate(x_test, y_test)
+```
+
+
+```{r}
+results1
+```
+
+Adding layer dropouts  by 50% appears to improve model.
+
+
+
+
+**3. When using the Gradient Decent Algorithm and Backpropogation, in which direction do updates move?**
+
+Gradient decent is an optimization algorithm used to minimize some function by iteratively  moving in the direction of the steepest descent as defined by the negative of the gradient. In neural network it optimizes the weight and bias reducing loss.The process continues until it reaches  a local minimum. Therefore updates move opposite direction of the gradient. 
+
+The goals of backpropagation is adjust each weight in the network in proportion to how much it contributes to overall error. If we iteratively reduce each weight’s error, eventually we’ll have a series of weights that produce good predictions.A neural network propagates the signal of the input data forward through its parameters towards the moment of decision, and then backpropagates information about the error, in reverse through the network, so that it can alter the parameters. Backpropagation takes the error associated with a wrong guess by a neural network, and uses that error to adjust the neural network’s parameters in the direction of less error.Therefore backpropagation updates move in opposite direction of neural network.
+
+
+**4. Explain what a Convolutional Neural Network is. How does a convnet compare to the traditional feedforward neural network?**
+
+A Convolutional Neural Network (CNN) , also known as convnets, is a deep learning algorithm almost universally used in computer vision applications. It can take in an input image, assign importance (learnable weights and biases) to various aspects/objects in the image and be able to differentiate one from the other. 
+
+As the name suggests, convnet contains convulutional layers  with a learnable filter (kernel), as a result the network learns the patterns in the images: edges, corners, arcs, then more complex figures. In other words,it does convolution  between the previous layer's output and the current layer's kernel and then it passes data to the next layer by passing through an activation function.
+
+On the other hand,traditional feedforward neural network does a linear combination (a mathematical operation) between the previous layer's output and the current layer's weights(vectors) and then it passes data to the next layer by passing through an activation function. The feedforward neural network is the first and simplest type of neural network. 
+
+
+
